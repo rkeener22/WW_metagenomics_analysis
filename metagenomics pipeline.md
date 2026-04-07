@@ -209,13 +209,23 @@ Using the reads obtained above, we will utilize alignment platforms and blast to
 
 ## Using BWA 
 
-First, you will need to download refseq genomes of your species of interest from NCBI. Next, you will need to concatenate the genomes if they arent already. Finally, you will need to index the genomes. 
+### preparing genomes
+First, you will need to download refseq genomes of your species of interest from NCBI.
 
-```./bwa/bwa genomes XXXX```
+```conda activate ncbi_datasets```
+```datasets download genome taxon "Bordetella" --reference --filename /dodo/rk167/bordatella_ref.zip```
+```unzip bordatella_ref.zip -d Bordetella_ref```
 
+Next, you will need to concatenate the genomes if they arent already using ```cat```.
+
+Finally, you will need to index the genomes. 
+
+```./bwa/bwa index ref.fna```
+
+### genome alignment
 Next, you will take the .fasta file created from the read extraction above and align it to the genomes of interest.
 
-```./bwa/bwa mem hpvgenomes.fa 69street-08052025.fastq.gz > HPV082525.sam```
+```./bwa/bwa mem /dodo/rk167/Bordetella_ref/Bordetella_combined.fna reads.fastq.gz > reads_aligned.sam```
 
 Then you will need to turn your .sam file into a sorted .bam
 
@@ -230,4 +240,9 @@ then index it
 ```samtools index ```
 
 and upload your indexed genome and reads into IGV. 
+
+
+samtools view -S -b output.sam > output.bam
+samtools sort output.bam -o sorted.bam
+samtools index sorted.bam
 
