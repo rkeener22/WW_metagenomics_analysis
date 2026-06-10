@@ -1,0 +1,386 @@
+---
+title: "phyloseq use"
+author: "Rachel Keener"
+date: "2026-05-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+if(!requireNamespace("BiocManager")){
+  install.packages("BiocManager")
+}
+BiocManager::install("phyloseq")
+```
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install("microbiome")
+```
+
+
+```{r}
+library(phyloseq)
+library(tidyverse)
+```
+
+```{r}
+# 1. Read the combined MPA file explicitly specifying tabs and disabling quotes
+kraken_data <- read_tsv("C:/Users/rkeen/Downloads/combined.txt", 
+                         col_names = TRUE, 
+                         show_col_types = FALSE)
+
+colnames(kraken_data) <- c("Classification", "20241126", "20241203", '20241209', '20241216', '20241230', '20250106', '20250127', '20250203', '20250210', '20250217', '20250303', '20250310', '20250324', '20250331', '20250407', '20250414', '20250421', '20250428', '20250505', '20250512', '20250519', '20250526', '20250602', '20250609', '20250616', '20250623', '20250630', '20250707', '20250714', '20250721', '20250728', '20250804', '20250811', '20250818', '20250825', '20250901', '20250908', '20250915', '20250922', '20250929', '20251008', '20251013', '20251020', '20251027', '20251103', '20251118', '20251201', '20251209', '20251216', '20251222', '20251229', '20260105', '20260112', '20260120', '20260202', '20260209', '20260216', '20260223', '20260302', '20260309', '20260316', '20260323', '20260330', '20260406', '20260413', '20260420', '20260427', '20260504')
+
+# 2. Filter down to Species level
+species_only <- kraken_data %>%
+  filter(str_detect(Classification, "d__")) %>%           
+  filter(!str_detect(Classification, "t__"))              
+
+# 3. Build the Taxonomy Matrix
+tax_mat <- species_only %>%
+  select(Classification) %>%
+  separate(Classification, 
+           into = c("Domain", "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), 
+           sep = "\\|", fill = "right") %>%
+  as.matrix()
+
+# Clean up taxonomic structural prefixes
+tax_mat <- gsub("[kpcofgs]__", "", tax_mat)
+taxon_ids <- paste0("Taxon_", 1:nrow(tax_mat))
+rownames(tax_mat) <- taxon_ids
+TAX <- tax_table(tax_mat)
+
+# 4. Build the OTU (Count) Matrix (selects all columns with numeric read counts)
+otu_mat <- species_only %>%
+  select(where(is.numeric)) %>%
+  as.matrix()
+rownames(otu_mat) <- taxon_ids
+OTU <- otu_table(otu_mat, taxa_are_rows = TRUE)
+
+# 5. Combine into Phyloseq Object
+pseq_data <- phyloseq(OTU, TAX)
+print(pseq_data)
+```
+
+
+```{r}
+# 1. Transform raw counts to relative abundance (fractions/percentages)
+pseq_rel <- transform_sample_counts(pseq_data, function(x) x / sum(x))
+
+# 2. Convert the phyloseq object into a standard tidy dataframe for ggplot
+plot_df <- psmelt(pseq_rel)
+
+# 3. Lump all species outside the Top 15 into an "Other" category
+# We weight the lumping by 'Abundance' so the 15 highest-percentage species stay split out
+plot_df_cleaned <- plot_df %>%
+  mutate(Domain = as.character(Domain)) %>%
+  mutate(Domain = fct_lump_n(Domain, n = 5, w = Abundance, other_level = "Other"))
+
+```
+
+
+```{r}
+my_colors = c('#264653','#4F6D54', '#005F73', '#0A9396', '#94D2BD','#C9E4C5','#FEFAE0', '#E9D8A6', '#E9C46A', "#CFA860", '#DDA15E', '#F4A261','#CA6702', '#E76F51', '#A83232','#FF4D6D', '#FF758C', '#FFB3A7' , "#4B3F72",  "#726E97", '#E0E4F0' )
+
+my_colors2 = c( '#005F73', '#0A9396','#C9E4C5', "#E9D8A6", '#FEFAE0' )
+
+# 4. Generate the Stacked Bar Plot
+png("Domains.png", width = 1000, height = 400)
+ggplot(plot_df_cleaned, aes(x = Sample, y = Abundance, fill = Domain)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = my_colors2, na.value = '#F5F5F5') + # <-- Applies the unique colors
+  theme_classic() +
+  labs(y = "Relative Abundance", x = "Sample ID", title = "Taxoniomic Identification of Classified Reads") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+dev.off()
+```
+```{r}
+# 1. Isolate species raw counts
+species_raw_counts <- kraken_data %>%
+  filter(str_detect(Classification, "s__")) %>%           
+  filter(!str_detect(Classification, "t__"))
+
+# 2. Extract and build the OTU matrix using numeric columns
+otu_mat_raw <- species_raw_counts %>% select(where(is.numeric)) %>% as.matrix()
+otu_mat_raw[is.na(otu_mat_raw)] <- 0
+
+# 3. Build the Taxonomy matrix safely
+# The "Additional pieces discarded" warning is normal—it just means sub-species tags were cleanly dropped
+tax_mat <- species_raw_counts %>%
+  select(Classification) %>%
+  separate(Classification, into = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), 
+           sep = "\\|", fill = "right", extra = "drop") %>%
+  as.matrix()
+
+# Clean up taxonomic structural prefixes (like s__ or g__)
+tax_mat <- gsub("[kpcofgs]__", "", tax_mat)
+
+# CRITICAL FIX: Use distinct, unique internal tags for row names to prevent the duplicate error
+taxon_ids <- paste0("Taxon_", 1:nrow(tax_mat))
+rownames(otu_mat_raw) <- taxon_ids
+rownames(tax_mat) <- taxon_ids
+
+# 4. Create Phyloseq object using absolute, unique row keys
+pseq_raw <- phyloseq(otu_table(otu_mat_raw, taxa_are_rows = TRUE), tax_table(tax_mat))
+
+# 5. Normalize counts relative ONLY to the classified species pool
+pseq_classified_rel <- transform_sample_counts(pseq_raw, function(x) x / sum(x))
+
+# 6. Melt into a tidy dataframe for ggplot
+plot_df <- psmelt(pseq_classified_rel)
+
+# ==========================================
+# CRITICAL FIX STEP: REMOVE NA TAXA
+# ==========================================
+plot_df_cleaned <- plot_df %>%
+  mutate(Species = as.character(Species)) %>%
+  filter(!is.na(Species)) %>%                    # <-- This drops the big grey NA bar completely
+  filter(Species != "NA") %>%                    # Bypasses literal text string "NA" variants
+  mutate(Species = fct_lump_n(Species, n = 20, w = Abundance, other_level = "Other"))
+# ==========================================
+
+# 9. Plot the relative abundance stack
+ggplot(plot_df_cleaned, aes(x = Sample, y = Abundance, fill = Species)) +
+  geom_bar(stat = "identity", position = "fill") + 
+  scale_fill_manual(values = my_colors) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_classic() +
+  labs(
+    y = "Relative Abundance (% of Classified Reads)", 
+    x = "Sample ID", 
+    title = "Top 20 Species Profile (Classified Reads Only)"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "right"
+  )
+```
+
+
+```{r}
+png("my_plot.png", width = 1000, height = 400)
+ggplot(plot_df_cleaned, aes(x = Sample, y = Abundance, fill = Species)) +
+  # CRITICAL FIX: position = "fill" standardizes the Y-axis to 100% within each individual sample
+  geom_bar(stat = "identity", position = "fill") + 
+  scale_fill_manual(values = my_colors) + 
+  scale_y_continuous(labels = scales::percent) + # Formats the y-axis cleanly from 0% to 100%
+  theme_classic() +
+  labs(
+    y = "Relative Abundance (% of Classified Reads)", 
+    x = "Sample ID", 
+    title = "Top 15 Species Profile"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "right"
+  )
+dev.off()
+```
+
+
+bacteria only
+
+```{r}
+# 1. CRITICAL: Isolate Bacteria and rows that contain Genus level data
+# We look for "k__Bacteria" (or "d__Bacteria") and ensure the row reaches a Genus "g__" tag
+bacteria_genus_raw <- kraken_data %>%
+  #filter(str_detect(Classification, "Bacteria")) %>%       # Keeps only Bacteria
+  filter(str_detect(Classification, "d__"))               # Ensures it has a Genus classification
+
+# 2. Extract and build the OTU counts matrix
+otu_mat_raw <- bacteria_genus_raw %>% select(where(is.numeric)) %>% as.matrix()
+otu_mat_raw[is.na(otu_mat_raw)] <- 0
+
+# 3. Build the Taxonomy mapping table
+# We only separate up to Genus since we are intentionally ignoring Species strings
+tax_mat <- bacteria_genus_raw %>%
+  select(Classification) %>%
+  separate(Classification, 
+           into = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus"), 
+           sep = "\\|", fill = "right", extra = "drop") %>%
+  as.matrix()
+
+# Clean up taxonomic structural prefixes (like g__ or f__)
+tax_mat <- gsub("[kpcofg]__", "", tax_mat)
+
+# Generate unique internal tracking tags for phyloseq
+taxon_ids <- paste0("Taxon_", 1:nrow(tax_mat))
+rownames(otu_mat_raw) <- taxon_ids
+rownames(tax_mat) <- taxon_ids
+
+# 4. Generate your phyloseq object
+pseq_raw <- phyloseq(otu_table(otu_mat_raw, taxa_are_rows = TRUE), tax_table(tax_mat))
+
+# 5. Extract to a long tidy dataframe
+plot_df <- psmelt(pseq_raw)
+
+# ==========================================
+# FILTER & LUMP BY GENUS
+# ==========================================
+plot_df_cleaned <- plot_df %>%
+  mutate(Genus = as.character(Genus)) %>%
+  filter(!is.na(Genus)) %>%                     # Drops missing Genus entries
+  filter(Genus != "NA" & Genus != "") %>%       # Bypasses literal text string "NA" versions
+  mutate(Genus = fct_lump_n(Genus, n = 20, w = Abundance, other_level = "Other"))
+# ==========================================
+
+# 6. Generate your 16-color high-contrast Polychrome palette
+
+# 7. Render the Bacteria Genus plot (scaled to 100% of bacterial genus reads)
+png("top20_bacterialgenus.png", width = 1000, height = 400)
+ggplot(plot_df_cleaned, aes(x = Sample, y = Abundance, fill = Genus)) +
+  geom_bar(stat = "identity", position = "fill") + 
+  scale_fill_manual(values = my_colors) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_classic() +
+  labs(
+    y = "Relative Abundance (% of Classified Bacteria)", 
+    x = "Sample ID", 
+    title = "Top 20 Bacterial Genera Profile"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "right"
+  )
+dev.off()
+```
+
+virus
+
+```{r}
+# 1. CRITICAL: Isolate Bacteria and rows that contain Genus level data
+# We look for "k__Bacteria" (or "d__Bacteria") and ensure the row reaches a Genus "g__" tag
+bacteria_genus_raw <- kraken_data %>%
+  filter(str_detect(Classification, "Viruses")) %>%       # Keeps only Bacteria
+  filter(str_detect(Classification, "g__"))               # Ensures it has a Genus classification
+
+# 2. Extract and build the OTU counts matrix
+otu_mat_raw <- bacteria_genus_raw %>% select(where(is.numeric)) %>% as.matrix()
+otu_mat_raw[is.na(otu_mat_raw)] <- 0
+
+# 3. Build the Taxonomy mapping table
+# We only separate up to Genus since we are intentionally ignoring Species strings
+tax_mat <- bacteria_genus_raw %>%
+  select(Classification) %>%
+  separate(Classification, 
+           into = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus"), 
+           sep = "\\|", fill = "right", extra = "drop") %>%
+  as.matrix()
+
+# Clean up taxonomic structural prefixes (like g__ or f__)
+tax_mat <- gsub("[kpcofg]__", "", tax_mat)
+
+# Generate unique internal tracking tags for phyloseq
+taxon_ids <- paste0("Taxon_", 1:nrow(tax_mat))
+rownames(otu_mat_raw) <- taxon_ids
+rownames(tax_mat) <- taxon_ids
+
+# 4. Generate your phyloseq object
+pseq_raw <- phyloseq(otu_table(otu_mat_raw, taxa_are_rows = TRUE), tax_table(tax_mat))
+
+# 5. Extract to a long tidy dataframe
+plot_df <- psmelt(pseq_raw)
+
+# ==========================================
+# FILTER & LUMP BY GENUS
+# ==========================================
+plot_df_cleaned <- plot_df %>%
+  mutate(Genus = as.character(Genus)) %>%
+  filter(!is.na(Genus)) %>%                     # Drops missing Genus entries
+  filter(Genus != "NA" & Genus != "") %>%       # Bypasses literal text string "NA" versions
+  mutate(Genus = fct_lump_n(Genus, n = 20, w = Abundance, other_level = "Other"))
+# ==========================================
+
+
+# 7. Render the Bacteria Genus plot (scaled to 100% of bacterial genus reads)
+png("top20_viralgenus.png", width = 1000, height = 400)
+ggplot(plot_df_cleaned, aes(x = Sample, y = Abundance, fill = Genus)) +
+  geom_bar(stat = "identity", position = "fill") + 
+  scale_fill_manual(values = my_colors) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_classic() +
+  labs(
+    y = "Relative Abundance (% of Classified Viruses)", 
+    x = "Sample ID", 
+    title = "Top 20 Viral Genera Profile"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "right"
+  )
+dev.off()
+```
+
+
+eukaryotic
+
+```{r}
+# 1. CRITICAL: Isolate Bacteria and rows that contain Genus level data
+# We look for "k__Bacteria" (or "d__Bacteria") and ensure the row reaches a Genus "g__" tag
+bacteria_genus_raw <- kraken_data %>%
+  filter(str_detect(Classification, "archaea")) %>%       # Keeps only Bacteria
+  filter(str_detect(Classification, "g__"))               # Ensures it has a Genus classification
+
+# 2. Extract and build the OTU counts matrix
+otu_mat_raw <- bacteria_genus_raw %>% select(where(is.numeric)) %>% as.matrix()
+otu_mat_raw[is.na(otu_mat_raw)] <- 0
+
+# 3. Build the Taxonomy mapping table
+# We only separate up to Genus since we are intentionally ignoring Species strings
+tax_mat <- bacteria_genus_raw %>%
+  select(Classification) %>%
+  separate(Classification, 
+           into = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus"), 
+           sep = "\\|", fill = "right", extra = "drop") %>%
+  as.matrix()
+
+# Clean up taxonomic structural prefixes (like g__ or f__)
+tax_mat <- gsub("[kpcofg]__", "", tax_mat)
+
+# Generate unique internal tracking tags for phyloseq
+taxon_ids <- paste0("Taxon_", 1:nrow(tax_mat))
+rownames(otu_mat_raw) <- taxon_ids
+rownames(tax_mat) <- taxon_ids
+
+# 4. Generate your phyloseq object
+pseq_raw <- phyloseq(otu_table(otu_mat_raw, taxa_are_rows = TRUE), tax_table(tax_mat))
+
+# 5. Extract to a long tidy dataframe
+plot_df <- psmelt(pseq_raw)
+
+# ==========================================
+# FILTER & LUMP BY GENUS
+# ==========================================
+plot_df_cleaned <- plot_df %>%
+  mutate(Genus = as.character(Genus)) %>%
+  filter(!is.na(Genus)) %>%                     # Drops missing Genus entries
+  filter(Genus != "NA" & Genus != "") %>%       # Bypasses literal text string "NA" versions
+  mutate(Genus = fct_lump_n(Genus, n = 20, w = Abundance, other_level = "Other"))
+# ==========================================
+
+# 6. Generate your 16-color high-contrast Polychrome palette
+
+# 7. Render the Bacteria Genus plot (scaled to 100% of bacterial genus reads)
+png("top20_Eukaryoticgenus.png", width = 1000, height = 400)
+ggplot(plot_df_cleaned, aes(x = Sample, y = Abundance, fill = Genus)) +
+  geom_bar(stat = "identity", position = "fill") + 
+  scale_fill_manual(values = my_colors) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_classic() +
+  labs(
+    y = "Relative Abundance (% of Classified Eukariotic)", 
+    x = "Sample ID", 
+    title = "Top 20 Eukariotic Genera Profile"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "right"
+  )
+dev.off()
+```
+
