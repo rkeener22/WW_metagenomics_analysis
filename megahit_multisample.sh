@@ -1,8 +1,10 @@
-for sample in /dodo/rk167/metafastp/norRNA/*_dedup_noribo.fastq.gz;
+for sample in /dodo/rk167/metafastp/norRNA/*_dedup_noribo.fastq.gz; do
+    # Extract just the filename (removes directory path)
+    filename=$(basename "$sample")
+    
+    # Extract just the '*' part (removes '_dedup_noribo.fastq.gz')
+    s="${filename%_dedup_noribo.fastq.gz}"
 
-do
-
-s=$(echo $sample | sed -E "s/\_.*//");
-
-megahit -r /dodo/rk167/metafastp/norRNA/"$s"_dedup_noribo.fastq.gz --presets meta-large -o /dodo/rk167/rk_contigs/"$sample"_contigs.fasta/; 
+    # Run MEGAhit using the extracted sample name
+    megahit -r "$sample" --presets meta-large -o "/dodo/rk167/rk_contigs/${s}_contigs"
 done
