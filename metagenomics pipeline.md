@@ -246,3 +246,18 @@ samtools view -S -b output.sam > output.bam
 samtools sort output.bam -o sorted.bam
 samtools index sorted.bam
 
+
+# 6. Form contigs
+
+paired ends
+```megahit -1 pe_1.fq -2 pe_2.fq -o out```
+merged only
+'''megahit -r se1.fq -o output_directory'''
+both and multiple libraries
+'''megahit -1 a1.fq,b1.fq,c1.fq -2 a2.fq,b2.fq,c2.fq -r se1.fq,se2.fq -o out'''
+
+add the '''--presets meta-large''' if the metagenome is complex
+
+final i used is 
+'''megahit -r se1.fq --presets meta-large -o output_directory'''
+
