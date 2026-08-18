@@ -1,16 +1,16 @@
 # Test metagenomics SOP
 
-##1. Getting things ready!
+## 1. Getting things ready!
 
-###Accessing the Stadler lab section of the p00 Server
+### Accessing the Stadler lab section of the p00 Server
 first you will need a linux/unix enabled "portal" to your computers terminal. For apple users this is already available but for windows users, consider Ubuntu or Gitbash. There are also more built out options that are more user friendly, such as the terminal tab in r studio. 
 
 Open the terminal and type ```ssh YOURRICEID@p00.cs.rice.edu```. You will be prompted for your normal rice password. Once in, you will be located in your home directory, usually ```home/users/YOURUSERID```. We also have a data/ and dodo/ directory. we will do most of our work on dodo/ due to space constraints on the other drives. 
 
-###tmux session
+### tmux session
 
 
-###Creating a Conda Environment & Adding needed programs
+### Creating a Conda Environment & Adding needed programs
 BWA, Kraken2, krakentools, fastp, ribodetector, ncbi_datasets, megahit
 
 ```conda create -n metaG -y bwa kraken2 krakentools fastp ribodetector ncbi-datasets-cli megahit```
@@ -22,7 +22,7 @@ activate environment anywhere, including in a tmux session so you can close your
 ```conda activate metaG```
 
 
-##2. Download data
+## 2. Download data
 
 All of the raw data is saved in ```/dodo/stadler_ww/RAWFILES``` under the date of the run and project code given by O'Connor lab. To download:
 
@@ -39,7 +39,7 @@ get command will download whatever needed to the location you started in p00, ad
 
 
 
-##3. Concatenate 
+## 3. Concatenate 
 BEFORE MAY 2026 - Make a new directory in ```/data/stadler_ww``` with the same header as the raw data folder. 
 ```mkdir /data/stadler_ww/date_of_sequencing```
  Find cat files in ```/data/stadler_ww/date_of_sequencing```.
@@ -53,11 +53,11 @@ Next you will use ```cat``` to create a single file for each paired end. This co
 
 
 
-##4. Data cleaning
-## Quality filtering
+## 4. Data cleaning
+### Quality filtering
 Here, we use ```fastp``` to remove low quality reads, reads with too many Ns, remove reads shorter than 100 bp, merge paired ends for longer sequence and reduced file size, repair low quality and N bases with other paired end, deduplicate PCR replicates. Here, there are several possibilities for cleaning the data. 
 
-### My run
+#### My run
 For initial merging and cleaning as well as statistics:
 ```fastp -m -i combined_R1.fastq.gz -I combined_R2.fastq.gz --merged_out combined.fastq.gz -l 100 -w 10```
 
@@ -71,7 +71,7 @@ or start with
 Deduplicated files are saved in ```/dodo/rk167/metafastp/dedupe```
 
 
-#### Defaults include: 
+##### Defaults include: 
 
 Adapter Trimming: Detects common adapters automatically, including Illumina and Nextera.
 
@@ -88,7 +88,7 @@ Duplication Evaluation: fastp evaluates duplication rate, and this module may us
 
 
 
-##5. Ribosomal RNA removal
+## 5. Ribosomal RNA removal
 
 Due to the rna-biased extraction method, bacterial rRNA is highly present in the data. These reads are difficult to assign to specific species, so they are removed for downstream assignment. These reads may be important in genome assembly or other tools. Here, i used a database-free neural network deep learning model called ```ribodetector``` to remove known and possible novel rRNA sequences from each sequencing file. This is faster on GPU but can be run on CPU with many threads. **100,000 reads takes about 1 hour on 40 threads**.  
 
@@ -110,8 +110,8 @@ Memory Usage: The --chunk_size parameter should be adjusted if you have low memo
 
 
 
-##6. Taxonomic Classification (and Human Read Assignment)
-## Using kmer-based classifier for efficient assignment
+## 6. Taxonomic Classification (and Human Read Assignment)
+### Using kmer-based classifier for efficient assignment
 Here, I use ```Kraken2``` to quickly assign reads to a core_nt dataset of refseq sequences. It includes all taxonomies including fungi, viruses, bacteria, and eukaryotes. I find that using a confidence level of 0.1 has been effective at stringency but also still getting to the species level much of the time. This produces a report which lists the percent, raw read count, and unique identifiers assigned to each taxa as well as a list of the reads and their assignment. 
 
 ```kraken2 --db /home/dbs/Kraken2/k2_core_nt --threads 10 /dodo/rk167/metafastp/combined.fastq.gz --confidence 0.1 --report /dodo/rk167/krakenreports_C01/krakenreport_combined.txt --report-minimizer-data --use-names > /dodo/rk167/krakenreads/kraken_combined.txt```
@@ -145,11 +145,11 @@ Memory: Loads database into RAM (no memory mapping).
 
 ```--use-names``` : Provides scientific name of taxa in addition to the taxa number.
 
-## Data cleaning for Analysis
+### Data cleaning for Analysis
 
 Using ```krakentools```, we will manipulate the files for downstream analysis.
 
-### Combine reports for data analysis
+#### Combine reports for data analysis
 
 This provides a single file with level and total raw read numbers for each date and taxa. 
 
@@ -157,7 +157,7 @@ This provides a single file with level and total raw read numbers for each date 
 
 Following this, you can download and clean this file for downstream analysis. This will include removing the header, dividing by total reads per sample and multiplying that by 1 million, and possibly normalizing to flow rate data. 
 
-### Extracting reads for alignments
+#### Extracting reads for alignments
 
 This extracts reads from specific taxa for alignment or reports. 
 
@@ -189,12 +189,12 @@ This extracts reads from specific taxa for alignment or reports.
 
 
 
-##7. Align sequences to genome of interest
+## 7. Align sequences to genome of interest
 Using the reads obtained above, we will utilize alignment platforms and blast to confirm the reads. 
 
-## Using BWA 
+### Using BWA 
 
-### preparing genomes
+#### preparing genomes
 First, you will need to download refseq genomes of your species of interest from NCBI.
 
 ```conda activate ncbi_datasets```
@@ -207,7 +207,7 @@ Finally, you will need to index the genomes.
 
 ```./bwa/bwa index ref.fna```
 
-### genome alignment
+#### genome alignment
 Next, you will take the .fasta file created from the read extraction above and align it to the genomes of interest.
 
 ```./bwa/bwa mem /dodo/rk167/Bordetella_ref/Bordetella_combined.fna reads.fastq.gz > reads_aligned.sam```
@@ -232,11 +232,11 @@ samtools sort output.bam -o sorted.bam
 samtools index sorted.bam
 
 
-##8. download or upload from your computer
+## 8. download or upload from your computer
 ssh
 
 
-# 6. Form contigs
+## 9. Form contigs
 
 paired ends
 ```megahit -1 pe_1.fq -2 pe_2.fq -o out```
