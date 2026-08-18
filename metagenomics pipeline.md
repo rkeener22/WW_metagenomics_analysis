@@ -1,10 +1,15 @@
+# Note on Accessing the Stadler lab section of the p00 Server
+first you will need a linux/unix enabled "portal" to your computers terminal. For apple users this is already available but for windows users, consider Ubuntu or Gitbash. There are also more built out options that are more user friendly, such as the terminal tab in r studio. 
+
+Open the terminal and type ```ssh YOURRICEID@p00.cs.rice.edu```. You will be prompted for your normal rice password. Once in, you will be located in your home directory, usually ```home/users/YOURUSERID```. We also have a data/ and dodo/ directory. we will do most of our work on dodo/ due to space constraints on the other drives. 
+
 # 1. Download data
 
-All of the raw data is saved in ```/dodo/stadler_ww/date_of_sequencing```
+All of the raw data is saved in ```/dodo/stadler_ww/RAWFILES``` under the date of the run and project code given by O'Connor lab. To download:
 
 ## From Missouri sequencing core
 
-While in the p00 server in the ```/dodo/stadler_ww``` folder (or folder of your choice), enter the following command and then the password given to you when prompted. This is best done in a tmux terminal multiplier so you can leave it and it wont impact download. 
+While in the p00 server in the ```/dodo/stadler_ww/RAWFILES``` folder (or folder of your choice), enter the following command and then the password when prompted. This is best done in a tmux terminal multiplier so you can leave it and it wont impact download. 
 
 ```sftp ext-ls58@download.bioinformatics.missouri.edu```
 
@@ -21,15 +26,15 @@ This may be necessary if downloading data from another lab (no longer on sequenc
 You can then add files to the server using the **Globus webapp**
 
 # 2. Concatenate 
-Make a new directory in ```/data/stadler_ww``` with the same header as the raw data folder.
+BEFORE MAY 2026 - Make a new directory in ```/data/stadler_ww``` with the same header as the raw data folder. 
+```mkdir /data/stadler_ww/date_of_sequencing```
+ Find cat files in ```/data/stadler_ww/date_of_sequencing```.
 
-```mkdir /dodo/stadler_ww/date_of_sequencing```
+AFTER MAY 2026 - Keep files in the ```/dodo/stadler_ww/date_of_sequencing``` folder
 
 Next you will use ```cat``` to create a single file for each paired end. This concatenates (combines end-to-end) all files (usually 8 lanes for each date) from each paired end (R1 & R2). You must ensure these are in order so that the R1 and R2 files will be consistent for later processing.
 
-```Cat 001_R1.fastq.gz 002_R1.fastq.gz 003_R1.fastq.gz 004_R1.fastq.gz 005_R1.fastq.gz 006_R1.fastq.gz 007_R1.fastq.gz 008_R1.fastq.gz > /data/stadler_ww/date_of_sequencing/combined_R1.fastq.gz```
-
- Find cat files in ```/data/stadler_ww/date_of_sequencing```.
+```Cat 001_R1.fastq.gz 002_R1.fastq.gz 003_R1.fastq.gz 004_R1.fastq.gz 005_R1.fastq.gz 006_R1.fastq.gz 007_R1.fastq.gz 008_R1.fastq.gz > ../combined_R1.fastq.gz```
 
 # 3. Data cleaning
 ## Quality filtering
