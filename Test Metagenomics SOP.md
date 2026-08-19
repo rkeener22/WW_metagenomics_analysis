@@ -45,7 +45,7 @@ Next you will use ```cat``` to create a single file for each paired end. This co
 R1
 ```Cat 001_R1.fastq.gz 002_R1.fastq.gz > combined_R1.fastq.gz```
 R2
-```Cat 001_R1.fastq.gz 002_R1.fastq.gz > combined_R1.fastq.gz```
+```Cat 001_R2.fastq.gz 002_R2.fastq.gz > combined_R2.fastq.gz```
 
 
 
