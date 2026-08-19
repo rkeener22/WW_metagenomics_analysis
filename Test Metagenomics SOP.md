@@ -99,7 +99,7 @@ This extracts reads from specific taxa for alignment or reports.
 ```-t``` : list of taxa to extract. 
 
 
-#### Download or upload from your computer
+### Download or upload from your computer
 we will download our file to your computer to look through it in excel! I load it to my downloads folder but you can do another place if you feel like it. 
 
 ```scp USERID@p00.cs.rice.edu:/dodo/stadler_ww/SOP_test/yourkrakenreport_file.txt ~/Downloads/```
