@@ -7,9 +7,6 @@ first you will need a linux/unix enabled "portal" to your computers terminal. Fo
 
 Open the terminal and type ```ssh YOURRICEID@p00.cs.rice.edu```. You will be prompted for your normal rice password. Once in, you will be located in your home directory, usually ```home/users/YOURUSERID```. We also have a data/ and dodo/ directory. we will do most of our work on dodo/ due to space constraints on the other drives. 
 
-### tmux session
-
-
 ### Creating a Conda Environment & Adding needed programs
 BWA, Kraken2, krakentools, fastp, ribodetector, ncbi_datasets, megahit
 
@@ -17,12 +14,12 @@ BWA, Kraken2, krakentools, fastp, ribodetector, ncbi_datasets, megahit
 or mamba
 ```mamba create -n metaG -y bwa kraken2 krakentools fastp ribodetector ncbi-datasets-cli megahit```
 
-activate environment anywhere, including in a tmux session so you can close your browser!
+activate environment anywhere, including in a tmux session so you can close the terminal!
 
 ```conda activate metaG```
 
 
-## 2. Download data
+## 2. Download data - we won't do this today
 
 All of the raw data is saved in ```/dodo/stadler_ww/RAWFILES``` under the date of the run and project code given by O'Connor lab. To download:
 
@@ -40,16 +37,15 @@ get command will download whatever needed to the location you started in p00, ad
 
 
 ## 3. Concatenate 
-BEFORE MAY 2026 - Make a new directory in ```/data/stadler_ww``` with the same header as the raw data folder. 
-```mkdir /data/stadler_ww/date_of_sequencing```
- Find cat files in ```/data/stadler_ww/date_of_sequencing```.
 
-AFTER MAY 2026 - Keep files in the ```/dodo/stadler_ww/date_of_sequencing``` folder
+Raw files are located in the ```/dodo/stadler_ww/SOP_test/``` folder. Navigate here with ```cd /dodo/stadler_ww/SOP_test/```
 
-Next you will use ```cat``` to create a single file for each paired end. This concatenates (combines end-to-end) all files (usually 8 lanes for each date) from each paired end (R1 & R2). You must ensure these are in order so that the R1 and R2 files will be consistent for later processing.
+Next you will use ```cat``` to create a single file for each paired end. This concatenates (combines end-to-end) all files (usually 8 lanes for each date, ive shrunk it to two for this test) from each paired end (R1 & R2). You must ensure these are in order so that the R1 and R2 files will be consistent for later processing. Generally we will want to keep the header of the file the same when creating new files, everything that comes before the lane number. 
 
-```Cat 001_R1.fastq.gz 002_R1.fastq.gz 003_R1.fastq.gz 004_R1.fastq.gz 005_R1.fastq.gz 006_R1.fastq.gz 007_R1.fastq.gz 008_R1.fastq.gz > ../combined_R1.fastq.gz```
-
+R1
+```Cat 001_R1.fastq.gz 002_R1.fastq.gz > combined_R1.fastq.gz```
+R2
+```Cat 001_R1.fastq.gz 002_R1.fastq.gz > combined_R1.fastq.gz```
 
 
 
@@ -59,54 +55,16 @@ Here, we use ```fastp``` to remove low quality reads, reads with too many Ns, re
 
 #### My run
 For initial merging and cleaning as well as statistics:
-```fastp -m -i combined_R1.fastq.gz -I combined_R2.fastq.gz --merged_out combined.fastq.gz -l 100 -w 10```
-
-cleaned and merged fastp files are found in ```/dodo/rk167/metafastp```
-
-For deduplication: 
-```fastp -i input.fastq.gz -o dedupe.fastq.gz -D -w 10```
-or start with
 ```fastp -m -i combined_R1.fastq.gz -I combined_R2.fastq.gz --merged_out combined.fastq.gz --dedup -l 100 -w 10```
-
-Deduplicated files are saved in ```/dodo/rk167/metafastp/dedupe```
-
-
-##### Defaults include: 
-
-Adapter Trimming: Detects common adapters automatically, including Illumina and Nextera.
-
-Quality Trimming: Trims low-quality bases from both ends (sliding window from 5' to 3') with a default threshold of Q15. 40% (int [=40]) of bases unqualified is max. if one read's number of N base is >5, then this read/pair is discarded.
-
-Length Filtering: Reads shorter than 15bp are discarded.
-
-Base Correction: Enabled for paired-end data. If a good overlap exists, mismatching bases are corrected if one has a high-quality score (>Q30) and the other is low-quality (<Q15).
-
-Threading: Uses 4 threads by default.
-
-Duplication Evaluation: fastp evaluates duplication rate, and this module may use 1G memory and take 10% ~ 20% more running time.
 
 
 
 
 ## 5. Ribosomal RNA removal
 
-Due to the rna-biased extraction method, bacterial rRNA is highly present in the data. These reads are difficult to assign to specific species, so they are removed for downstream assignment. These reads may be important in genome assembly or other tools. Here, i used a database-free neural network deep learning model called ```ribodetector``` to remove known and possible novel rRNA sequences from each sequencing file. This is faster on GPU but can be run on CPU with many threads. **100,000 reads takes about 1 hour on 40 threads**.  
+Due to the rna-biased extraction method, bacterial rRNA is highly present in the data. These reads are difficult to assign to specific species, so they are removed for downstream assignment. These reads may be important in genome assembly or other tools. Here, i used a database-free neural network deep learning model called ```ribodetector``` to remove known and possible novel rRNA sequences from each sequencing file. This is faster on GPU but can be run on CPU with many threads. **100,000,000 reads takes about 1 hour on 40 threads**.  
 
-```ribodetector_cpu -l 150 -i dedupe/merged_dedup.fastq.gz -o norRNA/merged_dedup_noribo.fastq.gz -t 40 --chunk_size 2000```
-
-The rRNA depleted data is stored in ```/dodo/rk167/metafastp/noribo```
-
-#### Default parameters: 
-Model (--model-file): model_len70_101 (packaged model)
-
-Input/Output: Supports FASTQ/FASTA, paired or single-end.
-
-Discordant Pair Behavior: If using none for prediction labels, discordant read pairs are discarded.
-
-Model Accuracy: Accuracy reduces for reads shorter than 40bp.
-
-Memory Usage: The --chunk_size parameter should be adjusted if you have low memory.
-
+```ribodetector_cpu -l 150 -i combined.fastq.gz -o _dedup_noribo_combined.fastq.gz -t 20 --chunk_size 2000```
 
 
 
@@ -114,42 +72,11 @@ Memory Usage: The --chunk_size parameter should be adjusted if you have low memo
 ### Using kmer-based classifier for efficient assignment
 Here, I use ```Kraken2``` to quickly assign reads to a core_nt dataset of refseq sequences. It includes all taxonomies including fungi, viruses, bacteria, and eukaryotes. I find that using a confidence level of 0.1 has been effective at stringency but also still getting to the species level much of the time. This produces a report which lists the percent, raw read count, and unique identifiers assigned to each taxa as well as a list of the reads and their assignment. 
 
-```kraken2 --db /home/dbs/Kraken2/k2_core_nt --threads 10 /dodo/rk167/metafastp/combined.fastq.gz --confidence 0.1 --report /dodo/rk167/krakenreports_C01/krakenreport_combined.txt --report-minimizer-data --use-names > /dodo/rk167/krakenreads/kraken_combined.txt```
+```kraken2 --db /home/dbs/Kraken2/k2_core_nt --threads 10 _dedup_noribo_combined.fastq.gz --confidence 0.1 --report krakenreport_01.txt --report-minimizer-data --use-names > krakenreads_01.txt```
 
-reports are saved to ```/dodo/rk167/krakenreports_C01```
-reads are saved to ```/dodo/rk167/krakenreads```
-
-#### Default parameters: 
-Confidence (--confidence): 0 (no confidence threshold; a single k-mer match can classify a read). I changed this.
-
-Minimum Hit Groups (--minimum-hit-groups): 2 (minimum number of hits required to classify a read).
-
-K-mer length (-k): 31.
-
-Minimizer length (-l): 15.
-
-Spaced Seed (-s): 7 (used for nucleotide databases).
-
-Memory: Loads database into RAM (no memory mapping).
-
-#### My additional parameters:
-```--db``` : database directory. The one I used was assmbled by someone else on **XXXX**
-
-```--threads``` : How many threads to use, default is 1 but 10 is way faster. 
-
-```--confidence``` : Confidence level, proportion of kmers that have to map to that taxa to be assigned. I did 0.1 but also tried 0.51 (too stringent). 
-
-```--report``` : if you want a report this is the output. 
-
-```--report-minimizer-data``` : this provides the number of unique kmers asigned to the taxa. Useful for figuring out the coverage. High read low minimizer count? Probably not real. 
-
-```--use-names``` : Provides scientific name of taxa in addition to the taxa number.
-
-### Data cleaning for Analysis
+### Combine reports for data analysis - we don't need to do this today
 
 Using ```krakentools```, we will manipulate the files for downstream analysis.
-
-#### Combine reports for data analysis
 
 This provides a single file with level and total raw read numbers for each date and taxa. 
 
@@ -157,7 +84,7 @@ This provides a single file with level and total raw read numbers for each date 
 
 Following this, you can download and clean this file for downstream analysis. This will include removing the header, dividing by total reads per sample and multiplying that by 1 million, and possibly normalizing to flow rate data. 
 
-#### Extracting reads for alignments
+#### Extracting reads for alignments - we don't need to do this today
 
 This extracts reads from specific taxa for alignment or reports. 
 
@@ -171,25 +98,17 @@ This extracts reads from specific taxa for alignment or reports.
 
 ```-t``` : list of taxa to extract. 
 
-#### Other settings:
 
-```--exclude``` : Instead of finding reads matching specified taxids, finds reads NOT matching specified taxids.
+#### Download or upload from your computer
+we will download our file to your computer to look through it in excel! I load it to my downloads folder but you can do another place if you feel like it. 
 
-```-r, --report MYFILE.KREPORT``` : Kraken report file (required if specifying --include-children or --include-parents)
-
-```--include-children``` : include reads classified at more specific levels than specified taxonomy ID levels.
-
-```--include-parents``` : include reads classified at all taxonomy levels between root and the specified taxonomy ID levels.
-
-```--max #``` : maximum number of reads to save.
-
-```--append``` : if output file exists, appends reads
+```scp USERID@p00.cs.rice.edu:/dodo/stadler_ww/SOP_test/yourkrakenreport_file.txt ~/Downloads/```
 
 
 
+# We won't do this today
 
-
-## 7. Align sequences to genome of interest
+## 7. Align sequences to genome of interest - we wont do this today
 Using the reads obtained above, we will utilize alignment platforms and blast to confirm the reads. 
 
 ### Using BWA 
@@ -231,22 +150,4 @@ samtools view -S -b output.sam > output.bam
 samtools sort output.bam -o sorted.bam
 samtools index sorted.bam
 
-
-## 8. download or upload from your computer
-ssh
-
-
-## 9. Form contigs
-
-paired ends
-```megahit -1 pe_1.fq -2 pe_2.fq -o out```
-merged only
-'''megahit -r se1.fq -o output_directory'''
-both and multiple libraries
-'''megahit -1 a1.fq,b1.fq,c1.fq -2 a2.fq,b2.fq,c2.fq -r se1.fq,se2.fq -o out'''
-
-add the '''--presets meta-large''' if the metagenome is complex
-
-final i used is 
-'''megahit -r se1.fq --presets meta-large -o output_directory'''
 
